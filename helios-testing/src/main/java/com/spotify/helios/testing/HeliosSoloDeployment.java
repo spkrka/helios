@@ -26,7 +26,6 @@ import com.spotify.docker.client.DefaultDockerClient;
 import com.spotify.docker.client.DockerCertificateException;
 import com.spotify.docker.client.DockerClient;
 import com.spotify.docker.client.DockerException;
-import com.spotify.docker.client.DockerRequestException;
 import com.spotify.docker.client.messages.ContainerConfig;
 import com.spotify.docker.client.messages.ContainerCreation;
 import com.spotify.docker.client.messages.ContainerExit;
@@ -78,32 +77,18 @@ public class HeliosSoloDeployment implements HeliosDeployment {
     this.binds = containerBinds();
 
     //TODO(negz): Determine and propagate NetworkManager DNS servers?
-    if (!dockerReachableFromContainer()) {
-      throw new AssertionError(String.format(
-              "Docker was not reachable using DOCKER_HOST=%s and DOCKER_CERT_PATH=%s from within a "
-                      + "container. Please ensure that DOCKER_HOST contains a full hostname or IP "
-                      + "address, not localhost, 127.0.0.1, etc.",
-              dockerHost.bindURI(),
-              dockerHost.dockerCertPath()));
+    try {
+      assertDockerReachableFromContainer();
+      if (dockerHost.address().equals("localhost") || dockerHost.address().equals("127.0.0.1")) {
+          heliosHost = containerGateway();
+      } else {
+        heliosHost = dockerHost.address();
+      }
+      this.heliosContainerId = deploySolo(heliosHost);
+    } catch (HeliosDeploymentException e) {
+      throw new AssertionError("Unable to deploy helios-solo container.", e);
     }
 
-    if (dockerHost.address().equals("localhost") || dockerHost.address().equals("127.0.0.1")) {
-      heliosHost = containerGateway();
-    } else {
-      heliosHost = dockerHost.address();
-    }
-
-    if (isNullOrEmpty(heliosHost)) {
-      throw new AssertionError(
-              "Unable to infer an IP address reachable from both the host and containers to use "
-                      + "for communication with Helios.");
-    }
-
-    this.heliosContainerId = deploySolo(heliosHost);
-
-    if (isNullOrEmpty(this.heliosContainerId)) {
-      throw new AssertionError("Unable to deploy helios-solo container.");
-    }
     this.heliosClient = HeliosClient.newBuilder()
             .setUser(username)
             .setEndpoints("http://" + HostAndPort.fromParts(heliosHost, HELIOS_MASTER_PORT))
@@ -152,7 +137,7 @@ public class HeliosSoloDeployment implements HeliosDeployment {
     return ImmutableList.copyOf(binds);
   }
 
-  private Boolean dockerReachableFromContainer() {
+  private void assertDockerReachableFromContainer() throws HeliosDeploymentException {
     final String probeName = randomString();
     final ContainerCreation creation;
     final ContainerExit exit;
@@ -170,37 +155,32 @@ public class HeliosSoloDeployment implements HeliosDeployment {
     try {
       dockerClient.pull(PROBE_IMAGE);
       creation = dockerClient.createContainer(containerConfig, probeName);
-    } catch (DockerRequestException e) {
-      log.error("helios-solo probe container creation failed: {}", e.message(), e);
-      return false;
     } catch (DockerException | InterruptedException e) {
-      log.error("helios-solo probe container creation failed", e);
-      return false;
+      throw new HeliosDeploymentException("helios-solo probe container creation failed", e);
     }
 
     try {
       dockerClient.startContainer(creation.id());
       exit = dockerClient.waitContainer(creation.id());
-    } catch (DockerRequestException e) {
-      log.error("helios-solo container probe failed: {}", e.message(), e);
-      killContainer(creation.id());
-      removeContainer(creation.id());
-      return false;
     } catch (DockerException | InterruptedException e) {
-      log.error("helios-solo container probe failed", e);
       killContainer(creation.id());
       removeContainer(creation.id());
-      return false;
+      throw new HeliosDeploymentException("helios-solo probe container failed", e);
     }
 
     if (exit.statusCode() != 0) {
-      log.error("helios-solo container probe exited with status code {}", exit.statusCode());
       removeContainer(creation.id());
-      return false;
+      throw new HeliosDeploymentException(String.format(
+              "Docker was not reachable (curl exit status %d) using DOCKER_HOST=%s and "
+                      + "DOCKER_CERT_PATH=%s from within a container. Please ensure that "
+                      + "DOCKER_HOST contains a full hostname or IP address, not localhost, "
+                      + "127.0.0.1, etc.",
+              exit.statusCode(),
+              dockerHost.bindURI(),
+              dockerHost.dockerCertPath()));
     }
 
     removeContainer(creation.id());
-    return true;
   }
 
   private List<String> probeCommand(final String probeName) {
@@ -226,9 +206,8 @@ public class HeliosSoloDeployment implements HeliosDeployment {
   }
 
   // TODO(negz): Merge with dockerReachableFromContainer() ?
-  private String containerGateway() {
+  private String containerGateway() throws HeliosDeploymentException {
     final ContainerCreation creation;
-    String gateway;
 
     final ContainerConfig containerConfig = ContainerConfig.builder()
             .env(env)
@@ -240,31 +219,25 @@ public class HeliosSoloDeployment implements HeliosDeployment {
     try {
       dockerClient.pull(PROBE_IMAGE);
       creation = dockerClient.createContainer(containerConfig);
-    } catch (DockerRequestException e) {
-      log.error("helios-solo gateway probe container creation failed: {}", e.message(), e);
-      return null;
     } catch (DockerException | InterruptedException e) {
-      log.error("helios-solo gateway probe container creation failed", e);
-      return null;
+      throw new HeliosDeploymentException("helios-solo gateway probe container creation failed", e);
     }
 
     try {
       dockerClient.startContainer(creation.id());
-      gateway = dockerClient.inspectContainer(creation.id()).networkSettings().gateway();
-    } catch (DockerRequestException e) {
-      log.error("helios-solo gateway probe failed: {}", e.message(), e);
-      gateway = null;
+      final String gateway = dockerClient.inspectContainer(creation.id())
+              .networkSettings().gateway();
+      killContainer(creation.id());
+      removeContainer(creation.id());
+      return gateway;
     } catch (DockerException | InterruptedException e) {
-      log.error("helios-solo gateway probe failed", e);
-      gateway = null;
+      killContainer(creation.id());
+      removeContainer(creation.id());
+      throw new HeliosDeploymentException("helios-solo gateway probe failed", e);
     }
-
-    killContainer(creation.id());
-    removeContainer(creation.id());
-    return gateway;
   }
 
-  private String deploySolo(final String heliosHost) {
+  private String deploySolo(final String heliosHost) throws HeliosDeploymentException {
     final ContainerCreation creation;
     final List<String> env = new ArrayList<String>();
     final String containerName = HELIOS_CONTAINER_PREFIX + this.namespace;
@@ -290,26 +263,16 @@ public class HeliosSoloDeployment implements HeliosDeployment {
     try {
       dockerClient.pull(HELIOS_IMAGE);
       creation = dockerClient.createContainer(containerConfig, containerName);
-    } catch (DockerRequestException e) {
-      log.error("helios-solo container creation failed: {}", e.message(), e);
-      return null;
     } catch (DockerException | InterruptedException e) {
-      log.error("helios-solo container creation failed", e);
-      return null;
+      throw new HeliosDeploymentException("helios-solo container creation failed", e);
     }
 
     try {
       dockerClient.startContainer(creation.id());
-    } catch (DockerRequestException e) {
-      log.error("helios-solo container start failed: {}", e.message(), e);
-      killContainer(creation.id());
-      removeContainer(creation.id());
-      return null;
     } catch (DockerException | InterruptedException e) {
-      log.error("helios-solo container start failed", e);
       killContainer(creation.id());
       removeContainer(creation.id());
-      return null;
+      throw new HeliosDeploymentException("helios-solo container start failed", e);
     }
 
     return creation.id();
