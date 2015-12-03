@@ -168,6 +168,7 @@ public class HeliosSoloDeployment implements HeliosDeployment {
             .build();
 
     try {
+      dockerClient.pull(PROBE_IMAGE);
       creation = dockerClient.createContainer(containerConfig, probeName);
     } catch (DockerRequestException e) {
       log.error("helios-solo probe container creation failed: {}", e.message(), e);
@@ -237,6 +238,7 @@ public class HeliosSoloDeployment implements HeliosDeployment {
             .build();
 
     try {
+      dockerClient.pull(PROBE_IMAGE);
       creation = dockerClient.createContainer(containerConfig);
     } catch (DockerRequestException e) {
       log.error("helios-solo gateway probe container creation failed: {}", e.message(), e);
@@ -286,6 +288,7 @@ public class HeliosSoloDeployment implements HeliosDeployment {
             .build();
 
     try {
+      dockerClient.pull(HELIOS_IMAGE);
       creation = dockerClient.createContainer(containerConfig, containerName);
     } catch (DockerRequestException e) {
       log.error("helios-solo container creation failed: {}", e.message(), e);
