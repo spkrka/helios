@@ -31,6 +31,7 @@ import com.spotify.docker.client.messages.ContainerCreation;
 import com.spotify.docker.client.messages.ContainerExit;
 import com.spotify.docker.client.messages.HostConfig;
 import com.spotify.docker.client.messages.Info;
+import com.spotify.docker.client.messages.NetworkSettings;
 import com.spotify.docker.client.messages.PortBinding;
 import com.spotify.helios.client.HeliosClient;
 
@@ -68,6 +69,7 @@ public class HeliosSoloDeployment implements HeliosDeployment {
 
   HeliosSoloDeployment(final Builder builder) {
     final String heliosHost;
+    final String heliosPort;
     final String username = Optional.fromNullable(builder.heliosUsername).or(randomString());
 
     this.dockerClient = checkNotNull(builder.dockerClient, "dockerClient");
@@ -85,13 +87,15 @@ public class HeliosSoloDeployment implements HeliosDeployment {
         heliosHost = dockerHost.address();
       }
       this.heliosContainerId = deploySolo(heliosHost);
+      heliosPort = getHeliosMasterPort(this.heliosContainerId, HELIOS_MASTER_PORT);
     } catch (HeliosDeploymentException e) {
       throw new AssertionError("Unable to deploy helios-solo container.", e);
     }
 
+    // Running the String host:port through HostAndPort does some validation for us.
     this.heliosClient = HeliosClient.newBuilder()
             .setUser(username)
-            .setEndpoints("http://" + HostAndPort.fromParts(heliosHost, HELIOS_MASTER_PORT))
+            .setEndpoints("http://" + HostAndPort.fromString(heliosHost + ":" + heliosPort))
             .build();
   }
 
@@ -249,7 +253,7 @@ public class HeliosSoloDeployment implements HeliosDeployment {
     env.add("HOST_ADDRESS=" + heliosHost);
 
     final Map<String, List<PortBinding>> portBindings = ImmutableMap.of(
-            heliosPort, singletonList(PortBinding.of("0.0.0.0", heliosPort)));
+            heliosPort, singletonList(PortBinding.of("0.0.0.0", "")));
     final HostConfig hostConfig = HostConfig.builder()
             .portBindings(portBindings)
             .binds(binds)
@@ -292,6 +296,31 @@ public class HeliosSoloDeployment implements HeliosDeployment {
     } catch (DockerException | InterruptedException e) {
       log.warn("unable to remove container {}", id, e);
     }
+  }
+
+  private String getHeliosMasterPort(final String containerId, final int port)
+          throws HeliosDeploymentException {
+    final String heliosPort = String.format("%d/tcp", port);
+    try {
+      final NetworkSettings settings = dockerClient.inspectContainer(containerId).networkSettings();
+      for (Map.Entry<String, List<PortBinding>> entry : settings.ports().entrySet()) {
+        if (entry.getKey().equals(heliosPort)) {
+          for (PortBinding portBinding : entry.getValue()) {
+            return portBinding.hostPort();
+          }
+        }
+      }
+    } catch (DockerException | InterruptedException e) {
+      throw new HeliosDeploymentException(String.format(
+              "unable to find port binding for %s in container %s.",
+              heliosPort,
+              containerId),
+              e);
+    }
+    throw new HeliosDeploymentException(String.format(
+            "unable to find port binding for %s in container %s.",
+            heliosPort,
+            containerId));
   }
 
   private String randomString() {
