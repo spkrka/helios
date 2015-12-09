@@ -68,8 +68,6 @@ public class HeliosSoloDeployment implements HeliosDeployment {
   final HeliosClient heliosClient;
 
   HeliosSoloDeployment(final Builder builder) {
-    final String heliosHost;
-    final String heliosPort;
     final String username = Optional.fromNullable(builder.heliosUsername).or(randomString());
 
     this.dockerClient = checkNotNull(builder.dockerClient, "dockerClient");
@@ -78,6 +76,8 @@ public class HeliosSoloDeployment implements HeliosDeployment {
     this.env = containerEnv();
     this.binds = containerBinds();
 
+    final String heliosHost;
+    final String heliosPort;
     //TODO(negz): Determine and propagate NetworkManager DNS servers?
     try {
       assertDockerReachableFromContainer();
@@ -143,9 +143,6 @@ public class HeliosSoloDeployment implements HeliosDeployment {
 
   private void assertDockerReachableFromContainer() throws HeliosDeploymentException {
     final String probeName = randomString();
-    final ContainerCreation creation;
-    final ContainerExit exit;
-
     final HostConfig hostConfig = HostConfig.builder()
             .binds(binds)
             .build();
@@ -156,6 +153,7 @@ public class HeliosSoloDeployment implements HeliosDeployment {
             .cmd(probeCommand(probeName))
             .build();
 
+    final ContainerCreation creation;
     try {
       dockerClient.pull(PROBE_IMAGE);
       creation = dockerClient.createContainer(containerConfig, probeName);
@@ -163,6 +161,7 @@ public class HeliosSoloDeployment implements HeliosDeployment {
       throw new HeliosDeploymentException("helios-solo probe container creation failed", e);
     }
 
+    final ContainerExit exit;
     try {
       dockerClient.startContainer(creation.id());
       exit = dockerClient.waitContainer(creation.id());
@@ -211,8 +210,6 @@ public class HeliosSoloDeployment implements HeliosDeployment {
 
   // TODO(negz): Merge with dockerReachableFromContainer() ?
   private String containerGateway() throws HeliosDeploymentException {
-    final ContainerCreation creation;
-
     final ContainerConfig containerConfig = ContainerConfig.builder()
             .env(env)
             .hostConfig(HostConfig.builder().build())
@@ -220,6 +217,7 @@ public class HeliosSoloDeployment implements HeliosDeployment {
             .cmd(ImmutableList.of("sh", "-c", "while true;do sleep 10;done"))
             .build();
 
+    final ContainerCreation creation;
     try {
       dockerClient.pull(PROBE_IMAGE);
       creation = dockerClient.createContainer(containerConfig);
@@ -242,16 +240,13 @@ public class HeliosSoloDeployment implements HeliosDeployment {
   }
 
   private String deploySolo(final String heliosHost) throws HeliosDeploymentException {
-    final ContainerCreation creation;
-    final List<String> env = new ArrayList<String>();
-    final String containerName = HELIOS_CONTAINER_PREFIX + this.namespace;
-    final String heliosPort = String.format("%d/tcp", HELIOS_MASTER_PORT);
-
     //TODO(negz): Don't make this.env immutable so early?
+    final List<String> env = new ArrayList<String>();
     env.addAll(this.env);
     env.add("HELIOS_NAME=" + HELIOS_NAME_PREFIX + this.namespace);
     env.add("HOST_ADDRESS=" + heliosHost);
 
+    final String heliosPort = String.format("%d/tcp", HELIOS_MASTER_PORT);
     final Map<String, List<PortBinding>> portBindings = ImmutableMap.of(
             heliosPort, singletonList(PortBinding.of("0.0.0.0", "")));
     final HostConfig hostConfig = HostConfig.builder()
@@ -264,8 +259,10 @@ public class HeliosSoloDeployment implements HeliosDeployment {
             .image(HELIOS_IMAGE)
             .build();
 
+    final ContainerCreation creation;
     try {
       dockerClient.pull(HELIOS_IMAGE);
+      final String containerName = HELIOS_CONTAINER_PREFIX + this.namespace;
       creation = dockerClient.createContainer(containerConfig, containerName);
     } catch (DockerException | InterruptedException e) {
       throw new HeliosDeploymentException("helios-solo container creation failed", e);
