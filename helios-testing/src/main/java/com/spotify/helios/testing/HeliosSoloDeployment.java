@@ -61,6 +61,7 @@ public class HeliosSoloDeployment implements HeliosDeployment {
 
   final DockerClient dockerClient;
   final DockerHost dockerHost;
+  final DockerHost containerDockerHost;
   final String namespace;
   final List<String> env;
   final List<String> binds;
@@ -71,7 +72,9 @@ public class HeliosSoloDeployment implements HeliosDeployment {
     final String username = Optional.fromNullable(builder.heliosUsername).or(randomString());
 
     this.dockerClient = checkNotNull(builder.dockerClient, "dockerClient");
-    this.dockerHost = Optional.fromNullable(builder.dockerHost).or(dockerHostFromEnv());
+    this.dockerHost = Optional.fromNullable(builder.dockerHost).or(DockerHost.fromEnv());
+    this.containerDockerHost = Optional.fromNullable(builder.containerDockerHost)
+            .or(containerDockerHostFromEnv());
     this.namespace = Optional.fromNullable(builder.namespace).or(randomString());
     this.env = containerEnv();
     this.binds = containerBinds();
@@ -95,11 +98,12 @@ public class HeliosSoloDeployment implements HeliosDeployment {
     // Running the String host:port through HostAndPort does some validation for us.
     this.heliosClient = HeliosClient.newBuilder()
             .setUser(username)
-            .setEndpoints("http://" + HostAndPort.fromString(heliosHost + ":" + heliosPort))
+            .setEndpoints("http://" +
+                    HostAndPort.fromString(dockerHost.address() + ":" + heliosPort))
             .build();
   }
 
-  private DockerHost dockerHostFromEnv() {
+  private DockerHost containerDockerHostFromEnv() {
     if (isBoot2Docker(dockerInfo())) {
       return DockerHost.from(DefaultDockerClient.DEFAULT_UNIX_ENDPOINT, null);
     } else {
@@ -122,8 +126,8 @@ public class HeliosSoloDeployment implements HeliosDeployment {
 
   private List<String> containerEnv() {
     final HashSet<String> env = new HashSet<String>();
-    env.add("DOCKER_HOST=" + dockerHost.bindURI().toString());
-    if (!isNullOrEmpty(dockerHost.dockerCertPath())) {
+    env.add("DOCKER_HOST=" + containerDockerHost.bindURI().toString());
+    if (!isNullOrEmpty(containerDockerHost.dockerCertPath())) {
       env.add("DOCKER_CERT_PATH=/certs");
     }
     return ImmutableList.copyOf(env);
@@ -131,12 +135,12 @@ public class HeliosSoloDeployment implements HeliosDeployment {
 
   private List<String> containerBinds() {
     final HashSet<String> binds = new HashSet<String>();
-    if (dockerHost.bindURI().getScheme().equals("unix")) {
-      binds.add(dockerHost.bindURI().getSchemeSpecificPart() + ":" +
-              dockerHost.bindURI().getSchemeSpecificPart());
+    if (containerDockerHost.bindURI().getScheme().equals("unix")) {
+      binds.add(containerDockerHost.bindURI().getSchemeSpecificPart() + ":" +
+              containerDockerHost.bindURI().getSchemeSpecificPart());
     }
-    if (!isNullOrEmpty(dockerHost.dockerCertPath())) {
-      binds.add(dockerHost.dockerCertPath() + ":/certs");
+    if (!isNullOrEmpty(containerDockerHost.dockerCertPath())) {
+      binds.add(containerDockerHost.dockerCertPath() + ":/certs");
     }
     return ImmutableList.copyOf(binds);
   }
@@ -179,8 +183,8 @@ public class HeliosSoloDeployment implements HeliosDeployment {
                       + "DOCKER_HOST contains a full hostname or IP address, not localhost, "
                       + "127.0.0.1, etc.",
               exit.statusCode(),
-              dockerHost.bindURI(),
-              dockerHost.dockerCertPath()));
+              containerDockerHost.bindURI(),
+              containerDockerHost.dockerCertPath()));
     }
 
     removeContainer(creation.id());
@@ -188,10 +192,10 @@ public class HeliosSoloDeployment implements HeliosDeployment {
 
   private List<String> probeCommand(final String probeName) {
     final List<String> cmd = new ArrayList<String>(ImmutableList.of("curl", "-f"));
-    switch (dockerHost.uri().getScheme()) {
+    switch (containerDockerHost.uri().getScheme()) {
       case "unix":
         cmd.addAll(ImmutableList.of(
-                "--unix-socket", dockerHost.uri().getSchemeSpecificPart(),
+                "--unix-socket", containerDockerHost.uri().getSchemeSpecificPart(),
                 "http:/containers/" + probeName + "/json"));
         break;
       case "https":
@@ -199,10 +203,10 @@ public class HeliosSoloDeployment implements HeliosDeployment {
                 "--insecure",
                 "--cert", "/certs/cert.pem",
                 "--key", "/certs/key.pem",
-                dockerHost.uri() + "/containers/" + probeName + "/json"));
+                containerDockerHost.uri() + "/containers/" + probeName + "/json"));
         break;
       default:
-        cmd.add(dockerHost.uri() + "/containers/" + probeName + "/json");
+        cmd.add(containerDockerHost.uri() + "/containers/" + probeName + "/json");
         break;
     }
     return ImmutableList.copyOf(cmd);
@@ -352,6 +356,7 @@ public class HeliosSoloDeployment implements HeliosDeployment {
   public static class Builder {
     private DockerClient dockerClient;
     private DockerHost dockerHost;
+    private DockerHost containerDockerHost;
     private String namespace;
     private String heliosUsername;
 
@@ -362,6 +367,11 @@ public class HeliosSoloDeployment implements HeliosDeployment {
 
     public Builder dockerHost(final DockerHost dockerHost) {
       this.dockerHost = dockerHost;
+      return this;
+    }
+
+    public Builder containerDockerHost(final DockerHost dockerHost) {
+      this.containerDockerHost = containerDockerHost;
       return this;
     }
 
