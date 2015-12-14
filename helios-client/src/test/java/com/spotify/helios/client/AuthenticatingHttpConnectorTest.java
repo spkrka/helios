@@ -37,7 +37,9 @@ import java.net.InetAddress;
 import java.net.URI;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 
 import javax.net.ssl.HttpsURLConnection;
 
@@ -45,7 +47,6 @@ import static com.google.common.io.Resources.getResource;
 import static org.junit.Assert.assertSame;
 import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.argThat;
-import static org.mockito.Matchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -57,11 +58,11 @@ public class AuthenticatingHttpConnectorTest {
   private static final Path CERTIFICATE_PATH = Paths.get(getResource("UIDCACert.pem").getPath());
   private static final Path KEY_PATH = Paths.get(getResource("UIDCACert.key").getPath());
 
-  private final DefaultHttpConnector connector = mock(DefaultHttpConnector.class);
-  private final String method = "GET";
-  private final byte[] entity = new byte[0];
-  private final ImmutableMap<String, List<String>> headers = ImmutableMap.of();
+  private static final String DEFAULT_METHOD = "GET";
+  private static final byte[] DEFAULT_ENTITY = new byte[0];
+  private static final ImmutableMap<String, List<String>> DEFAULT_HEADERS = ImmutableMap.of();
 
+  private final DefaultHttpConnector connector = mock(DefaultHttpConnector.class);
   private List<Endpoint> endpoints;
 
   @Before
@@ -70,6 +71,20 @@ public class AuthenticatingHttpConnectorTest {
         endpoint(new URI("https://server1.example"), InetAddresses.forString("192.168.0.1")),
         endpoint(new URI("https://server2.example"), InetAddresses.forString("192.168.0.2"))
     );
+  }
+
+  private static Endpoint endpoint(final URI uri, final InetAddress ip) {
+    return new Endpoint() {
+      @Override
+      public URI getUri() {
+        return uri;
+      }
+
+      @Override
+      public InetAddress getIp() {
+        return ip;
+      }
+    };
   }
 
   private AuthenticatingHttpConnector createAuthenticatingConnector(
@@ -90,23 +105,55 @@ public class AuthenticatingHttpConnectorTest {
                                            endpointIterator, connector);
   }
 
-  private CustomTypeSafeMatcher<URI> matchesAnyEndpoint(final String path) {
-    return new CustomTypeSafeMatcher<URI>("A URI matching one of the endpoints in " + endpoints) {
+  /**
+   * A Matcher for Requests that asserts that the Request matches the given headers, method,
+   * entity, and that the Request matches the {@link #matchesEndpoint(Endpoint, Request)} test for
+   * any of the preconfigured Endpoints.
+   */
+  private CustomTypeSafeMatcher<Request> matchesAnyEndpoint(final Map<String, List<String>> headers,
+                                                            final String method,
+                                                            final byte[] entity,
+                                                            final String path) {
+    return new CustomTypeSafeMatcher<Request>(
+        "A request matching one of the endpoints in " + endpoints) {
       @Override
-      protected boolean matchesSafely(final URI item) {
-        for (Endpoint endpoint : endpoints) {
-          final InetAddress ip = endpoint.getIp();
-          final URI uri = endpoint.getUri();
+      protected boolean matchesSafely(final Request actual) {
 
-          if (item.getScheme().equals(uri.getScheme()) &&
-              item.getHost().equals(ip.getHostAddress()) &&
-              item.getPath().equals(path)) {
+        return headers.equals(actual.getHeaders()) &&
+               method.equals(actual.getMethod()) &&
+               Arrays.equals(entity, actual.getEntity()) &&
+               matchesAnyEndpointPath(actual);
+      }
+
+      private boolean matchesAnyEndpointPath(final Request actual) {
+        for (Endpoint endpoint : endpoints) {
+          if (matchesEndpoint(endpoint, actual) && actual.getUri().getPath().equals(path)) {
             return true;
           }
         }
         return false;
       }
     };
+  }
+
+  /**
+   * Tests that the Request instance has a URI which "matches" the scheme of the Endpoint's URI and
+   * that the URI's host matches the Endpoint's ip.hostaddress
+   */
+  private static boolean matchesEndpoint(Endpoint endpoint, Request request) {
+    final URI requestUri = request.getUri();
+    return requestUri.getScheme().equals(endpoint.getUri().getScheme()) &&
+           requestUri.getHost().equals(endpoint.getIp().getHostAddress());
+  }
+
+  /** Sets up a Matcher for Requests that uses the default headers, method and entity. */
+  private CustomTypeSafeMatcher<Request> matchesAnyEndpoint(String path) {
+    return matchesAnyEndpoint(DEFAULT_HEADERS, DEFAULT_METHOD, DEFAULT_ENTITY, path);
+  }
+
+  /** Sets up a Request using all of the default values */
+  private Request newRequest(URI uri) {
+    return new Request(uri, DEFAULT_METHOD, DEFAULT_ENTITY, DEFAULT_HEADERS);
   }
 
   private Identity mockIdentity() {
@@ -124,16 +171,10 @@ public class AuthenticatingHttpConnectorTest {
     final String path = "/foo/bar";
 
     final HttpsURLConnection connection = mock(HttpsURLConnection.class);
-    when(connector.connect(argThat(matchesAnyEndpoint(path)),
-                           eq(method),
-                           eq(entity),
-                           eq(headers))
-    ).thenReturn(connection);
+    when(connector.connect(argThat(matchesAnyEndpoint(path)))).thenReturn(connection);
     when(connection.getResponseCode()).thenReturn(200);
 
-    final URI uri = new URI("https://helios" + path);
-
-    authConnector.connect(uri, method, entity, headers);
+    authConnector.connect(newRequest(new URI("https://helios" + path)));
 
     verify(connector, never()).setExtraHttpsHandler(any(HttpsHandler.class));
   }
@@ -145,16 +186,10 @@ public class AuthenticatingHttpConnectorTest {
     final String path = "/foo/bar";
 
     final HttpsURLConnection connection = mock(HttpsURLConnection.class);
-    when(connector.connect(argThat(matchesAnyEndpoint(path)),
-                           eq(method),
-                           eq(entity),
-                           eq(headers))
-    ).thenReturn(connection);
+    when(connector.connect(argThat(matchesAnyEndpoint(path)))).thenReturn(connection);
     when(connection.getResponseCode()).thenReturn(200);
 
-    final URI uri = new URI("https://helios" + path);
-
-    authConnector.connect(uri, method, entity, headers);
+    authConnector.connect(newRequest(new URI("https://helios" + path)));
 
     verify(connector).setExtraHttpsHandler(certFileHttpsHandlerWithArgs(
         USER, CERTIFICATE_PATH, KEY_PATH));
@@ -172,16 +207,10 @@ public class AuthenticatingHttpConnectorTest {
     final String path = "/another/one";
 
     final HttpsURLConnection connection = mock(HttpsURLConnection.class);
-    when(connector.connect(argThat(matchesAnyEndpoint(path)),
-        eq(method),
-        eq(entity),
-        eq(headers))
-    ).thenReturn(connection);
+    when(connector.connect(argThat(matchesAnyEndpoint(path)))).thenReturn(connection);
     when(connection.getResponseCode()).thenReturn(200);
 
-    URI uri = new URI("https://helios" + path);
-
-    authConnector.connect(uri, method, entity, headers);
+    authConnector.connect(newRequest(new URI("https://helios" + path)));
 
     verify(connector).setExtraHttpsHandler(sshAgentHttpsHandlerWithArgs(USER, proxy, identity));
   }
@@ -198,36 +227,17 @@ public class AuthenticatingHttpConnectorTest {
     final String path = "/another/one";
 
     final HttpsURLConnection connection = mock(HttpsURLConnection.class);
-    when(connector.connect(argThat(matchesAnyEndpoint(path)),
-        eq(method),
-        eq(entity),
-        eq(headers))
-    ).thenReturn(connection);
+    when(connector.connect(argThat(matchesAnyEndpoint(path)))).thenReturn(connection);
     when(connection.getResponseCode()).thenReturn(401);
 
-    URI uri = new URI("https://helios" + path);
-
-    HttpURLConnection returnedConnection = authConnector.connect(uri, method, entity, headers);
+    final URI uri = new URI("https://helios" + path);
+    final HttpURLConnection returnedConnection = authConnector.connect(newRequest(uri));
 
     verify(connector).setExtraHttpsHandler(sshAgentHttpsHandlerWithArgs(USER, proxy, identity));
 
     assertSame("If there is only one identity do not expect any additional endpoints to "
                + "be called after the first returns Unauthorized",
         returnedConnection, connection);
-  }
-
-  private static Endpoint endpoint(final URI uri, final InetAddress ip) {
-    return new Endpoint() {
-      @Override
-      public URI getUri() {
-        return uri;
-      }
-
-      @Override
-      public InetAddress getIp() {
-        return ip;
-      }
-    };
   }
 
   private static HttpsHandler sshAgentHttpsHandlerWithArgs(

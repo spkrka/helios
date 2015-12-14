@@ -61,11 +61,13 @@ class DefaultRequestDispatcher implements RequestDispatcher {
   public ListenableFuture<Response> request(final URI uri, final String method,
                                             final byte[] entityBytes,
                                             final Map<String, List<String>> headers) {
+
+    final Request req = new Request(uri, method, entityBytes, headers);
+
     return executorService.submit(new Callable<Response>() {
       @Override
       public Response call() throws Exception {
-        final HttpURLConnection connection =
-            httpConnector.connect(uri, method, entityBytes, headers);
+        final HttpURLConnection connection = httpConnector.connect(req);
         final int status = connection.getResponseCode();
         final InputStream rawStream;
 

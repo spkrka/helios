@@ -20,14 +20,8 @@ package com.spotify.helios.client;
 import com.spotify.helios.common.HeliosException;
 
 import java.net.HttpURLConnection;
-import java.net.URI;
-import java.util.List;
-import java.util.Map;
 
 interface HttpConnector extends AutoCloseable {
 
-  // TODO (mbrown): it's ugly that this has the same list of parameters as RequestDispatcher
-  // TODO (mbrown): should create a Request interface instead to hold all of them
-  HttpURLConnection connect(final URI uri, final String method, final byte[] entity,
-                            final Map<String, List<String>> headers) throws HeliosException;
+  HttpURLConnection connect(final Request request) throws HeliosException;
 }

@@ -40,7 +40,6 @@ import java.net.UnknownHostException;
 import java.nio.file.Path;
 import java.util.Deque;
 import java.util.List;
-import java.util.Map;
 
 import static java.net.HttpURLConnection.HTTP_BAD_GATEWAY;
 import static java.net.HttpURLConnection.HTTP_FORBIDDEN;
@@ -97,15 +96,14 @@ public class AuthenticatingHttpConnector implements HttpConnector {
   }
 
   @Override
-  public HttpURLConnection connect(final URI uri, final String method, final byte[] entity,
-                                   final Map<String, List<String>> headers) throws HeliosException {
+  public HttpURLConnection connect(final Request request) throws HeliosException {
     final Endpoint endpoint = endpointIterator.next();
 
     // convert the URI whose hostname portion is a domain name into a URI where the host is an IP
     // as we expect there to be several different IP addresses besides a common domain name
     final URI ipUri;
     try {
-      ipUri = toIpUri(endpoint, uri);
+      ipUri = toIpUri(endpoint, request.getUri());
     } catch (URISyntaxException e) {
       throw new HeliosException(e);
     }
@@ -132,7 +130,7 @@ public class AuthenticatingHttpConnector implements HttpConnector {
                 user, agentProxy.get(), identity));
           }
 
-          final HttpURLConnection connection = delegate.connect(ipUri, method, entity, headers);
+          final HttpURLConnection connection = delegate.connect(request.withUri(ipUri));
 
           final int responseCode = connection.getResponseCode();
           if (responseCode == HTTP_BAD_GATEWAY) {

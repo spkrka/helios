@@ -19,6 +19,7 @@ package com.spotify.helios.client;
 
 import com.google.common.base.Joiner;
 import com.google.common.base.Throwables;
+import com.google.common.collect.ImmutableMap;
 
 import com.spotify.helios.common.HeliosException;
 import com.spotify.helios.common.Json;
@@ -61,13 +62,12 @@ public class DefaultHttpConnector implements HttpConnector {
   }
 
   @Override
-  public HttpURLConnection connect(final URI uri, final String method, final byte[] entity,
-                                   final Map<String, List<String>> headers) throws HeliosException {
+  public HttpURLConnection connect(final Request request) throws HeliosException {
     final Endpoint endpoint = endpointIterator.next();
     final String endpointHost = endpoint.getUri().getHost();
 
     try {
-      return connect0(uri, method, entity, headers, endpointHost);
+      return connect0(request, endpointHost);
     } catch (ConnectException | SocketTimeoutException | UnknownHostException e) {
       // UnknownHostException happens if we can't resolve hostname into IP address.
       // UnknownHostException's getMessage method returns just the hostname which is a
@@ -79,10 +79,13 @@ public class DefaultHttpConnector implements HttpConnector {
     }
   }
 
-  private HttpURLConnection connect0(final URI ipUri, final String method, final byte[] entity,
-                                     final Map<String, List<String>> headers,
-                                     final String endpointHost)
+  private HttpURLConnection connect0(final Request request, final String endpointHost)
       throws IOException {
+    final String method = request.getMethod();
+    final URI ipUri = request.getUri();
+    final ImmutableMap<String, List<String>> headers = request.getHeaders();
+    final byte[] entity = request.getEntity();
+
     if (log.isTraceEnabled()) {
       log.trace("req: {} {} {} {} {} {}", method, ipUri, headers.size(),
           Joiner.on(',').withKeyValueSeparator("=").join(headers),
