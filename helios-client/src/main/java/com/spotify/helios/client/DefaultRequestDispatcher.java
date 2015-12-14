@@ -25,6 +25,7 @@ import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.ListeningExecutorService;
 
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.spotify.helios.client.tls.Fingerprint;
 import com.spotify.helios.client.tls.SshAgentSSLSocketFactory;
 import com.spotify.helios.common.HeliosException;
 import com.spotify.helios.common.Json;
@@ -48,6 +49,7 @@ import java.net.URISyntaxException;
 import java.net.URLConnection;
 import java.net.UnknownHostException;
 import java.nio.charset.StandardCharsets;
+import java.security.interfaces.RSAPublicKey;
 import java.util.Collections;
 import java.util.Deque;
 import java.util.List;
@@ -252,6 +254,11 @@ class DefaultRequestDispatcher implements RequestDispatcher {
         final SSLSocketFactory factory = new SshAgentSSLSocketFactory(agentProxy, identity, user);
         httpsConnection.setSSLSocketFactory(factory);
         log.debug("configured SshAgentSSLSocketFactory with identity={}", identity);
+        if (log.isDebugEnabled() && identity.getPublicKey() instanceof RSAPublicKey) {
+          Fingerprint fp = new Fingerprint((RSAPublicKey) identity.getPublicKey());
+          log.debug("SSH identity has fingerprint {} and public key {}",
+              fp.toFingerprint(), fp.toOpenSshFormat());
+        }
       }
     }
 
