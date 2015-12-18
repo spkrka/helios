@@ -17,7 +17,6 @@
 
 package com.spotify.helios.client;
 
-import java.net.URI;
 import java.util.List;
 import java.util.Map;
 
@@ -25,16 +24,12 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 
 class Response {
 
-  private final String method;
-  private final URI uri;
   private final int status;
   private final byte[] payload;
   private final Map<String, List<String>> headers;
 
-  public Response(final String method, final URI uri, final int status, final byte[] payload,
+  public Response(final int status, final byte[] payload,
                   final Map<String, List<String>> headers) {
-    this.method = method;
-    this.uri = uri;
     this.status = status;
     this.payload = payload;
     this.headers = headers;
@@ -43,9 +38,7 @@ class Response {
   @Override
   public String toString() {
     return "Response{" +
-           "method='" + method + '\'' +
-           ", uri=" + uri +
-           ", status=" + status +
+           "status=" + status +
            ", payload='" + decode(payload) + '\'' +
            ", headers=" + headers +
            '}';
@@ -57,14 +50,6 @@ class Response {
     }
     final int length = Math.min(payload.length, 1024);
     return new String(payload, 0, length, UTF_8);
-  }
-
-  public String method() {
-    return method;
-  }
-
-  public URI uri() {
-    return uri;
   }
 
   public int status() {

@@ -78,7 +78,7 @@ public class HeliosClientTest {
                              final int responseCode, final byte[] responseBody) {
 
     final URI uri = baseURI.resolve(relativePath);
-    final Response response = new Response(method, uri, responseCode, responseBody, emptyHeaders);
+    final Response response = new Response(responseCode, responseBody, emptyHeaders);
 
     when(dispatcher.request(eq(uri), anyString(), eq(emptyByteArray), anyMap()))
         .thenReturn(immediateFuture(response));

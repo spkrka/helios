@@ -96,7 +96,7 @@ class DefaultRequestDispatcher implements RequestDispatcher {
         }
 
         return new Response(
-            method, uri, status, payload.toByteArray(),
+            status, payload.toByteArray(),
             Collections.unmodifiableMap(Maps.newHashMap(connection.getHeaderFields())));
       }
 
