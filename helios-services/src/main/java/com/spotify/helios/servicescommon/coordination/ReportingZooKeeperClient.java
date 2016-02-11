@@ -29,6 +29,8 @@ import org.apache.zookeeper.KeeperException;
 import org.apache.zookeeper.ZooKeeper;
 import org.apache.zookeeper.data.ACL;
 import org.apache.zookeeper.data.Stat;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -40,6 +42,8 @@ import java.util.List;
  * Calls are delegated to a {@link ZooKeeperClient}.
  */
 public class ReportingZooKeeperClient implements ZooKeeperClient {
+
+  private static final Logger log = LoggerFactory.getLogger(ReportingZooKeeperClient.class);
 
   private final ZooKeeperClient client;
   private final String tag;
@@ -118,10 +122,12 @@ public class ReportingZooKeeperClient implements ZooKeeperClient {
 
   @Override
   public void deleteRecursive(String path) throws KeeperException {
+    log.info("Start ReportingZooKeeperClient.deleteRecursive()");
     reporter.time(tag, "deleteRecursive", () -> {
       client.deleteRecursive(path);
       return null;
     });
+    log.info("End ReportingZooKeeperClient.deleteRecursive()");
   }
 
   @Override
