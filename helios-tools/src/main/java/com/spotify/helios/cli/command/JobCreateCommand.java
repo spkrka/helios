@@ -34,6 +34,7 @@ import com.spotify.helios.common.descriptors.HttpHealthCheck;
 import com.spotify.helios.common.descriptors.Job;
 import com.spotify.helios.common.descriptors.JobId;
 import com.spotify.helios.common.descriptors.PortMapping;
+import com.spotify.helios.common.descriptors.Resources;
 import com.spotify.helios.common.descriptors.ServiceEndpoint;
 import com.spotify.helios.common.descriptors.ServicePorts;
 import com.spotify.helios.common.descriptors.TcpHealthCheck;
@@ -121,6 +122,10 @@ public class JobCreateCommand extends ControlCommand {
   private final Argument healthCheckTcpArg;
   private final Argument securityOptArg;
   private final Argument networkModeArg;
+  private final Argument memoryArg;
+  private final Argument memorySwapArg;
+  private final Argument cpuSetCpusArg;
+  private final Argument cpuSharesArg;
   private final Argument metadataArg;
   private final Supplier<Map<String, String>> envVarSupplier;
 
@@ -253,6 +258,26 @@ public class JobCreateCommand extends ControlCommand {
     networkModeArg = parser.addArgument("--network-mode")
         .help("Sets the networking mode for the container. Supported values are: bridge, host, and "
               + "container:<name|id>. Docker defaults to bridge.");
+
+    memoryArg = parser.addArgument("--memory")
+        .type(Long.class)
+        .setDefault((Object) null)
+        .help("Sets the memory limit in bytes for the container.");
+
+    memorySwapArg = parser.addArgument("--memory-swap")
+        .type(Long.class)
+        .setDefault((Object) null)
+        .help("Total memory limit (memory + swap); set -1 to enable unlimited swap. "
+              + "You must use this with memory and make the swap value larger than memory");
+
+    cpuSetCpusArg = parser.addArgument("--cpu-set-cpus")
+        .help("String value containing the cgroups CpusetCpus to use.");
+
+    cpuSharesArg = parser.addArgument("--cpu-shares")
+        .type(Integer.class)
+        .setDefault((Object) null)
+        .help("An integer value containing the CPU Shares for container"
+              + "(ie. the relative weight vs other containers).");
 
     this.envVarSupplier = envVarSupplier;
   }
@@ -525,6 +550,11 @@ public class JobCreateCommand extends ControlCommand {
     final String networkMode = options.getString(networkModeArg.getDest());
     if (!isNullOrEmpty(networkMode)) {
       builder.setNetworkMode(networkMode);
+    }
+
+    final Long memory = options.getLong(memoryArg.getDest());
+    if (memory != null) {
+      builder.setResources(new Resources())
     }
 
     final String token = options.getString(tokenArg.getDest());

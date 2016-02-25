@@ -31,7 +31,7 @@ import org.jetbrains.annotations.Nullable;
  * {
  *   "memory"     : 10485760,
  *   "memorySwap" : 10485760,
- *   "cpuset"     : "0",
+ *   "cpusetCpus" : "0",
  *   "cpuShares"  : 512
  * }
  * </pre>
@@ -41,16 +41,16 @@ public class Resources extends Descriptor {
   private final Long memory;
   private final Long memorySwap;
   private final Long cpuShares;
-  private final String cpuset;
+  private final String cpusetCpus;
 
   public Resources(@JsonProperty("memory") final Long memory,
                    @JsonProperty("memorySwap") final Long memorySwap,
                    @JsonProperty("cpuShares") final Long cpuShares,
-                   @JsonProperty("cpuset") final String cpuset) {
+                   @JsonProperty("cpusetCpus") final String cpusetCpus) {
     this.memory = memory;
     this.memorySwap = memorySwap;
     this.cpuShares = cpuShares;
-    this.cpuset = cpuset;
+    this.cpusetCpus = cpusetCpus;
   }
 
   @Nullable
@@ -69,8 +69,8 @@ public class Resources extends Descriptor {
   }
 
   @Nullable
-  public String getCpuset() {
-    return cpuset;
+  public String getCpusetCpus() {
+    return cpusetCpus;
   }
 
   @Override
@@ -87,7 +87,7 @@ public class Resources extends Descriptor {
     if (cpuShares != null ? !cpuShares.equals(that.cpuShares) : that.cpuShares != null) {
       return false;
     }
-    if (cpuset != null ? !cpuset.equals(that.cpuset) : that.cpuset != null) {
+    if (cpusetCpus != null ? !cpusetCpus.equals(that.cpusetCpus) : that.cpusetCpus != null) {
       return false;
     }
     if (memory != null ? !memory.equals(that.memory) : that.memory != null) {
@@ -105,7 +105,7 @@ public class Resources extends Descriptor {
     int result = memory != null ? memory.hashCode() : 0;
     result = 31 * result + (memorySwap != null ? memorySwap.hashCode() : 0);
     result = 31 * result + (cpuShares != null ? cpuShares.hashCode() : 0);
-    result = 31 * result + (cpuset != null ? cpuset.hashCode() : 0);
+    result = 31 * result + (cpusetCpus != null ? cpusetCpus.hashCode() : 0);
     return result;
   }
 
@@ -115,7 +115,7 @@ public class Resources extends Descriptor {
         .add("memory", memory)
         .add("memorySwap", memorySwap)
         .add("cpuShares", cpuShares)
-        .add("cpuset", cpuset)
+        .add("cpusetCpus", cpusetCpus)
         .toString();
   }
 }

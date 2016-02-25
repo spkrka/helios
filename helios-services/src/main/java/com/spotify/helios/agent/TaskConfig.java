@@ -289,7 +289,7 @@ public class TaskConfig {
     if (resources != null) {
       builder.memory(resources.getMemory());
       builder.memorySwap(resources.getMemorySwap());
-      builder.cpusetCpus(resources.getCpuset());
+      builder.cpusetCpus(resources.getCpusetCpus());
       builder.cpuShares(resources.getCpuShares());
     }
 
