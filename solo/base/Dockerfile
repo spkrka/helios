@@ -14,7 +14,7 @@ RUN curl -o $SKYDNS_PLUGIN_DEB -L $SKYDNS_PLUGIN_DEB_URI \
     && rm $SKYDNS_PLUGIN_DEB
 
 # Install Go (from the official golang Dockerfile)
-ENV GOLANG_VERSION 1.4.2
+ENV GOLANG_VERSION 1.6
 ENV PATH /go/bin:/usr/local/go/bin:$PATH
 ENV GOPATH /go
 
@@ -23,9 +23,9 @@ RUN curl -sSL https://storage.googleapis.com/golang/go$GOLANG_VERSION.linux-amd6
 RUN mkdir -p /go/src /go/bin && chmod -R 777 /go
 
 # Install skydns
-RUN mkdir -p /go/src/github.com/skynetservices
-RUN cd /go/src/github.com/skynetservices \
-    && git clone https://github.com/skynetservices/skydns.git \
+RUN mkdir -p /go/src/github.com/davidxia
+RUN cd /go/src/github.com/davidxia \
+    && git clone https://github.com/davidxia/skydns.git \
     && cd skydns && go get -v && go build
 
 # Install etcd
